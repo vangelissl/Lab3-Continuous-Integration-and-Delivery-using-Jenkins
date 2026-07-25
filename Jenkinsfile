@@ -1,19 +1,18 @@
+@Library('cicd-library') _
+
 pipeline {
 
-    agent any
+    agent none
 
-    tools {
-        nodejs 'node'
-    }
 
     environment {
 
         IMAGE_TAG = "v1.0"
 
-        DOCKER_USERNAME = "mariastashenko"
+        DOCKER_USER = "mariastashenko"
 
-        MAIN_IMAGE = "${DOCKER_USERNAME}/nodemain:${IMAGE_TAG}"
-        DEV_IMAGE  = "${DOCKER_USERNAME}/nodedev:${IMAGE_TAG}"
+        MAIN_IMAGE = "${DOCKER_USER}/nodemain:${IMAGE_TAG}"
+        DEV_IMAGE  = "${DOCKER_USER}/nodedev:${IMAGE_TAG}"
 
     }
 
@@ -23,8 +22,12 @@ pipeline {
 
         stage('Checkout') {
 
+            agent any
+
             steps {
+
                 checkout scm
+
             }
 
         }
@@ -32,8 +35,19 @@ pipeline {
 
         stage('Build') {
 
+            agent {
+
+                docker {
+                    image 'node:20'
+                    reuseNode true
+                }
+
+            }
+
             steps {
+
                 sh 'npm install'
+
             }
 
         }
@@ -41,14 +55,27 @@ pipeline {
 
         stage('Test') {
 
+            agent {
+
+                docker {
+                    image 'node:20'
+                    reuseNode true
+                }
+
+            }
+
             steps {
+
                 sh 'npm test'
+
             }
 
         }
 
 
-        stage('Hadolint Dockerfile') {
+        stage('Hadolint') {
+
+            agent any
 
             steps {
 
@@ -61,25 +88,21 @@ pipeline {
 
         stage('Build Docker Image') {
 
+            agent any
+
             steps {
 
                 script {
 
                     if (env.BRANCH_NAME == 'main') {
 
-                        sh """
-                            docker build \
-                            -t ${MAIN_IMAGE} .
-                        """
+                        dockerBuild(MAIN_IMAGE)
 
                     }
 
                     else if (env.BRANCH_NAME == 'dev') {
 
-                        sh """
-                            docker build \
-                            -t ${DEV_IMAGE} .
-                        """
+                        dockerBuild(DEV_IMAGE)
 
                     }
 
@@ -98,6 +121,8 @@ pipeline {
 
         stage('Trivy Scan') {
 
+            agent any
+
             steps {
 
                 script {
@@ -105,48 +130,25 @@ pipeline {
                     if (env.BRANCH_NAME == 'main') {
 
                         sh """
-                            trivy image \
-                            --exit-code 0 \
-                            ${MAIN_IMAGE}
+                        trivy image \
+                        --severity HIGH,CRITICAL \
+                        --exit-code 0 \
+                        ${MAIN_IMAGE}
                         """
 
                     }
+
 
                     else if (env.BRANCH_NAME == 'dev') {
 
                         sh """
-                            trivy image \
-                            --exit-code 0 \
-                            ${DEV_IMAGE}
+                        trivy image \
+                        --severity HIGH,CRITICAL \
+                        --exit-code 0 \
+                        ${DEV_IMAGE}
                         """
 
                     }
-
-                }
-
-            }
-
-        }
-
-
-
-        stage('Docker Login') {
-
-            steps {
-
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'dockerhub',
-                        usernameVariable: 'USERNAME',
-                        passwordVariable: 'PASSWORD'
-                    )
-                ]) {
-
-                    sh '''
-                        echo "$PASSWORD" | docker login \
-                        -u "$USERNAME" \
-                        --password-stdin
-                    '''
 
                 }
 
@@ -158,23 +160,22 @@ pipeline {
 
         stage('Push Docker Image') {
 
+            agent any
+
             steps {
 
                 script {
 
                     if (env.BRANCH_NAME == 'main') {
 
-                        sh """
-                            docker push ${MAIN_IMAGE}
-                        """
+                        dockerPush(MAIN_IMAGE)
 
                     }
 
+
                     else if (env.BRANCH_NAME == 'dev') {
 
-                        sh """
-                            docker push ${DEV_IMAGE}
-                        """
+                        dockerPush(DEV_IMAGE)
 
                     }
 
@@ -188,21 +189,28 @@ pipeline {
 
         stage('Trigger Deployment') {
 
+            agent any
+
             steps {
 
                 script {
 
                     if (env.BRANCH_NAME == 'main') {
 
-                        build job: 'Deploy_to_main',
-                              wait: false
+                        build(
+                            job: 'Deploy_to_main',
+                            wait: false
+                        )
 
                     }
 
+
                     else if (env.BRANCH_NAME == 'dev') {
 
-                        build job: 'Deploy_to_dev',
-                              wait: false
+                        build(
+                            job: 'Deploy_to_dev',
+                            wait: false
+                        )
 
                     }
 
@@ -211,6 +219,7 @@ pipeline {
             }
 
         }
+
 
     }
 
@@ -223,15 +232,17 @@ pipeline {
 
         }
 
+
         success {
 
-            echo "Pipeline completed successfully for ${env.BRANCH_NAME}"
+            echo "CICD completed successfully"
 
         }
 
+
         failure {
 
-            echo "Pipeline failed for ${env.BRANCH_NAME}"
+            echo "CICD failed"
 
         }
 

@@ -1,6 +1,11 @@
+@Library('cicd-library') _
+
+
 pipeline {
 
+
     agent any
+
 
     environment {
 
@@ -10,57 +15,55 @@ pipeline {
 
     }
 
+
+
     stages {
+
 
         stage('Docker Login') {
 
             steps {
 
-                withCredentials([usernamePassword(
+                withCredentials([
+                    usernamePassword(
                         credentialsId: 'dockerhub',
-                        usernameVariable: 'DOCKER_USERNAME',
-                        passwordVariable: 'DOCKER_PASSWORD')]) {
+                        usernameVariable: 'USERNAME',
+                        passwordVariable: 'PASSWORD'
+                    )
+                ]) {
+
 
                     sh '''
-                    echo "$DOCKER_PASSWORD" | docker login \
-                        -u "$DOCKER_USERNAME" \
-                        --password-stdin
+                    echo "$PASSWORD" | docker login \
+                    -u "$USERNAME" \
+                    --password-stdin
                     '''
+
                 }
 
             }
 
         }
 
-        stage('Pull Image') {
 
-            steps {
-
-                sh "docker pull ${IMAGE}"
-
-            }
-
-        }
 
         stage('Deploy') {
 
             steps {
 
-                sh """
-                    docker stop ${CONTAINER} || true
-                    docker rm ${CONTAINER} || true
-
-                    docker run -d \
-                        --name ${CONTAINER} \
-                        -p 3000:3000 \
-                        ${IMAGE}
-                """
+                dockerDeploy(
+                    IMAGE,
+                    CONTAINER,
+                    "3000"
+                )
 
             }
 
         }
 
+
     }
+
 
     post {
 
@@ -71,5 +74,6 @@ pipeline {
         }
 
     }
+
 
 }
