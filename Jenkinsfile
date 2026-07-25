@@ -4,7 +4,6 @@ pipeline {
 
     agent none
 
-
     environment {
 
         IMAGE_TAG = "v1.0"
@@ -138,7 +137,6 @@ pipeline {
 
                     }
 
-
                     else if (env.BRANCH_NAME == 'dev') {
 
                         sh """
@@ -172,7 +170,6 @@ pipeline {
 
                     }
 
-
                     else if (env.BRANCH_NAME == 'dev') {
 
                         dockerPush(DEV_IMAGE)
@@ -204,7 +201,6 @@ pipeline {
 
                     }
 
-
                     else if (env.BRANCH_NAME == 'dev') {
 
                         build(
@@ -226,23 +222,16 @@ pipeline {
 
     post {
 
-        always {
-
-            sh 'docker logout || true'
-
-        }
-
-
         success {
 
-            echo "CICD completed successfully"
+            echo "CICD completed successfully for ${env.BRANCH_NAME}"
 
         }
 
 
         failure {
 
-            echo "CICD failed"
+            echo "CICD failed for ${env.BRANCH_NAME}"
 
         }
 
