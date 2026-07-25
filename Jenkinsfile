@@ -24,9 +24,7 @@ pipeline {
         stage('Checkout') {
 
             steps {
-
                 checkout scm
-
             }
 
         }
@@ -35,9 +33,7 @@ pipeline {
         stage('Build') {
 
             steps {
-
                 sh 'npm install'
-
             }
 
         }
@@ -46,8 +42,17 @@ pipeline {
         stage('Test') {
 
             steps {
-
                 sh 'npm test'
+            }
+
+        }
+
+
+        stage('Hadolint Dockerfile') {
+
+            steps {
+
+                sh 'hadolint Dockerfile'
 
             }
 
@@ -60,28 +65,60 @@ pipeline {
 
                 script {
 
-
                     if (env.BRANCH_NAME == 'main') {
-
 
                         sh """
                             docker build \
                             -t ${MAIN_IMAGE} .
                         """
 
+                    }
 
-                    } else if (env.BRANCH_NAME == 'dev') {
-
+                    else if (env.BRANCH_NAME == 'dev') {
 
                         sh """
                             docker build \
                             -t ${DEV_IMAGE} .
                         """
 
+                    }
 
-                    } else {
+                    else {
 
                         error "Unsupported branch ${env.BRANCH_NAME}"
+
+                    }
+
+                }
+
+            }
+
+        }
+
+
+        stage('Trivy Scan') {
+
+            steps {
+
+                script {
+
+                    if (env.BRANCH_NAME == 'main') {
+
+                        sh """
+                            trivy image \
+                            --exit-code 0 \
+                            ${MAIN_IMAGE}
+                        """
+
+                    }
+
+                    else if (env.BRANCH_NAME == 'dev') {
+
+                        sh """
+                            trivy image \
+                            --exit-code 0 \
+                            ${DEV_IMAGE}
+                        """
 
                     }
 
@@ -97,13 +134,13 @@ pipeline {
 
             steps {
 
-
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub',
-                    usernameVariable: 'USERNAME',
-                    passwordVariable: 'PASSWORD'
-                )]) {
-
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub',
+                        usernameVariable: 'USERNAME',
+                        passwordVariable: 'PASSWORD'
+                    )
+                ]) {
 
                     sh '''
                         echo "$PASSWORD" | docker login \
@@ -111,9 +148,7 @@ pipeline {
                         --password-stdin
                     '''
 
-
                 }
-
 
             }
 
@@ -123,34 +158,27 @@ pipeline {
 
         stage('Push Docker Image') {
 
-
             steps {
-
 
                 script {
 
-
                     if (env.BRANCH_NAME == 'main') {
-
 
                         sh """
                             docker push ${MAIN_IMAGE}
                         """
 
+                    }
 
-                    } else if (env.BRANCH_NAME == 'dev') {
-
+                    else if (env.BRANCH_NAME == 'dev') {
 
                         sh """
                             docker push ${DEV_IMAGE}
                         """
 
-
                     }
 
-
                 }
-
 
             }
 
@@ -160,71 +188,52 @@ pipeline {
 
         stage('Trigger Deployment') {
 
-
             steps {
-
 
                 script {
 
-
                     if (env.BRANCH_NAME == 'main') {
-
 
                         build job: 'Deploy_to_main',
                               wait: false
 
+                    }
 
-                    } else if (env.BRANCH_NAME == 'dev') {
-
+                    else if (env.BRANCH_NAME == 'dev') {
 
                         build job: 'Deploy_to_dev',
                               wait: false
 
-
                     }
 
-
                 }
-
 
             }
 
         }
 
-
     }
-
 
 
     post {
 
-
         always {
-
 
             sh 'docker logout || true'
 
-
         }
-
 
         success {
 
-
-            echo "CICD pipeline completed successfully for ${env.BRANCH_NAME}"
-
+            echo "Pipeline completed successfully for ${env.BRANCH_NAME}"
 
         }
-
 
         failure {
 
-
-            echo "CICD pipeline failed for ${env.BRANCH_NAME}"
-
+            echo "Pipeline failed for ${env.BRANCH_NAME}"
 
         }
-
 
     }
 
