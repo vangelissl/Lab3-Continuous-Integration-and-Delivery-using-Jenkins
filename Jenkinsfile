@@ -107,7 +107,7 @@ pipeline {
 
                     else {
 
-                        error "Unsupported branch ${env.BRANCH_NAME}"
+                        error "Unsupported branch: ${env.BRANCH_NAME}"
 
                     }
 
@@ -126,27 +126,29 @@ pipeline {
 
                 script {
 
+                    def image = ""
+
                     if (env.BRANCH_NAME == 'main') {
 
-                        sh """
-                        trivy image \
-                        --severity HIGH,CRITICAL \
-                        --exit-code 0 \
-                        ${MAIN_IMAGE}
-                        """
+                        image = MAIN_IMAGE
 
                     }
 
                     else if (env.BRANCH_NAME == 'dev') {
 
-                        sh """
-                        trivy image \
-                        --severity HIGH,CRITICAL \
-                        --exit-code 0 \
-                        ${DEV_IMAGE}
-                        """
+                        image = DEV_IMAGE
 
                     }
+
+
+                    sh """
+                    trivy image \
+                    --scanners vuln \
+                    --cache-dir /tmp/trivy-cache-${BUILD_NUMBER} \
+                    --severity HIGH,CRITICAL \
+                    --exit-code 0 \
+                    ${image}
+                    """
 
                 }
 
@@ -215,7 +217,6 @@ pipeline {
             }
 
         }
-
 
     }
 
