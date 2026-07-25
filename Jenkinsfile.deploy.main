@@ -1,0 +1,75 @@
+pipeline {
+
+    agent any
+
+    environment {
+
+        IMAGE = "mariastashenko/nodemain:v1.0"
+
+        CONTAINER = "nodemain-container"
+
+    }
+
+    stages {
+
+        stage('Docker Login') {
+
+            steps {
+
+                withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub',
+                        usernameVariable: 'DOCKER_USERNAME',
+                        passwordVariable: 'DOCKER_PASSWORD')]) {
+
+                    sh '''
+                    echo "$DOCKER_PASSWORD" | docker login \
+                        -u "$DOCKER_USERNAME" \
+                        --password-stdin
+                    '''
+                }
+
+            }
+
+        }
+
+        stage('Pull Image') {
+
+            steps {
+
+                sh "docker pull ${IMAGE}"
+
+            }
+
+        }
+
+        stage('Deploy') {
+
+            steps {
+
+                sh """
+                    docker stop ${CONTAINER} || true
+                    docker rm ${CONTAINER} || true
+
+                    docker run -d \
+                        --name ${CONTAINER} \
+                        -p 3000:3000 \
+                        ${IMAGE}
+                """
+
+            }
+
+        }
+
+    }
+
+    post {
+
+        always {
+
+            sh 'docker logout || true'
+
+        }
+
+    }
+
+}

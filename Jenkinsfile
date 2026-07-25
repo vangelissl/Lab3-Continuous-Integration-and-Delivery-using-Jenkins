@@ -2,15 +2,16 @@ pipeline {
     agent any
 
     tools {
-        nodejs 'node'
+        nodejs 'NodeJS'
     }
 
     environment {
-        MAIN_IMAGE = "nodemain:v1.0"
-        DEV_IMAGE = "nodedev:v1.0"
+        IMAGE_TAG = "v1.0"
 
-        MAIN_CONTAINER = "nodemain-container"
-        DEV_CONTAINER = "nodedev-container"
+        DOCKER_USER = "mariastashenko"
+
+        MAIN_IMAGE = "${DOCKER_USER}/nodemain:${IMAGE_TAG}"
+        DEV_IMAGE  = "${DOCKER_USER}/nodedev:${IMAGE_TAG}"
     }
 
     stages {
@@ -21,13 +22,11 @@ pipeline {
             }
         }
 
-
         stage('Build') {
             steps {
                 sh 'npm install'
             }
         }
-
 
         stage('Test') {
             steps {
@@ -35,85 +34,98 @@ pipeline {
             }
         }
 
-
         stage('Build Docker Image') {
             steps {
                 script {
 
                     if (env.BRANCH_NAME == 'main') {
 
-                        sh '''
-                            docker build -t ${MAIN_IMAGE} .
-                        '''
+                        sh """
+                        docker build -t ${MAIN_IMAGE} .
+                        """
 
-                    } 
-                    else if (env.BRANCH_NAME == 'dev') {
+                    } else {
 
-                        sh '''
-                            docker build -t ${DEV_IMAGE} .
-                        '''
+                        sh """
+                        docker build -t ${DEV_IMAGE} .
+                        """
 
                     }
-                    else {
-                        error "Unsupported branch: ${env.BRANCH_NAME}"
-                    }
+
                 }
             }
         }
 
+        stage('Docker Login') {
+            steps {
 
-        stage('Deploy') {
+                withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub',
+                        usernameVariable: 'DOCKER_USERNAME',
+                        passwordVariable: 'DOCKER_PASSWORD')]) {
+
+                    sh '''
+                    echo "$DOCKER_PASSWORD" | docker login \
+                        -u "$DOCKER_USERNAME" \
+                        --password-stdin
+                    '''
+                }
+
+            }
+        }
+
+        stage('Push Image') {
             steps {
                 script {
 
                     if (env.BRANCH_NAME == 'main') {
 
-                        sh '''
-                            echo "Deploying main environment..."
+                        sh "docker push ${MAIN_IMAGE}"
 
-                            docker stop ${MAIN_CONTAINER} || true
-                            docker rm ${MAIN_CONTAINER} || true
+                    } else {
 
-                            docker run -d \
-                                --name ${MAIN_CONTAINER} \
-                                --expose 3000 \
-                                -p 3000:3000 \
-                                ${MAIN_IMAGE}
-                        '''
+                        sh "docker push ${DEV_IMAGE}"
 
-                    }
-
-
-                    else if (env.BRANCH_NAME == 'dev') {
-
-                        sh '''
-                            echo "Deploying dev environment..."
-
-                            docker stop ${DEV_CONTAINER} || true
-                            docker rm ${DEV_CONTAINER} || true
-
-                            docker run -d \
-                                --name ${DEV_CONTAINER} \
-                                --expose 3001 \
-                                -p 3001:3000 \
-                                ${DEV_IMAGE}
-                        '''
                     }
 
                 }
             }
         }
-    }
 
+        stage('Trigger Deployment') {
+
+            steps {
+
+                script {
+
+                    if (env.BRANCH_NAME == 'main') {
+
+                        build job: 'Deploy_to_main',
+                                wait: false
+
+                    } else {
+
+                        build job: 'Deploy_to_dev',
+                                wait: false
+
+                    }
+
+                }
+
+            }
+
+        }
+
+    }
 
     post {
 
-        success {
-            echo "Pipeline completed successfully for ${env.BRANCH_NAME}"
+        always {
+
+            sh 'docker logout || true'
+
         }
 
-        failure {
-            echo "Pipeline failed for ${env.BRANCH_NAME}"
-        }
     }
+
 }
